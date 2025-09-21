@@ -1,0 +1,11 @@
+{
+    "Summary in simple words" : "string",
+    "Credebility score": "integer out of 1 to 100",
+    "Explanations of clauses and terms" : " string",
+    "Digital literacy tips" : "string",
+    "Verified links related to the document" : "string"
+
+
+
+
+}
