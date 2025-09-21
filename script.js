@@ -69,65 +69,143 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
     }
     
-    function showResults(data) {
-        loadingContainer.innerHTML = '';
-        errorContainer.innerHTML = '';
-        
-        console.log('📊 API Response:', data);
-        
-        // Handle different response formats
-        let assessment, riskLevel, score, recommendation;
-        
-        if (data.analysis) {
-            const analysis = data.analysis;
-            assessment = analysis.verdict?.overall_assessment || 'Analysis completed';
-            riskLevel = analysis.verdict?.risk_level || 'Unknown';
-            score = analysis.context_aware_credibility_score?.overall_score || 0;
-            recommendation = analysis.context_aware_credibility_score?.recommendation || 'No recommendation';
-        } else {
-            assessment = data.verdict?.overall_assessment || data.summary || 'Analysis completed';
-            riskLevel = data.verdict?.risk_level || data.risk_level || 'Unknown';
-            score = data.context_aware_credibility_score?.overall_score || data.score || 0;
-            recommendation = data.context_aware_credibility_score?.recommendation || data.recommendation || 'No recommendation';
-        }
-        
-        let riskColorClass = 'text-slate-300';
-        if (riskLevel === 'Low') riskColorClass = 'text-green-400';
-        if (riskLevel === 'Medium') riskColorClass = 'text-yellow-400';
-        if (riskLevel === 'High') riskColorClass = 'text-orange-400';
-        if (riskLevel === 'Critical') riskColorClass = 'text-red-500';
-        
-        resultsContainer.innerHTML = `
-            <div class="animate-fade-in bg-slate-800/50 border border-slate-700 rounded-lg p-6 space-y-4">
-                <h2 class="text-2xl font-bold text-slate-100 border-b border-slate-600 pb-2">
-                    ✅ Analysis Complete
-                </h2>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <h3 class="font-semibold text-cyan-400">Credibility Score</h3>
-                        <p class="text-3xl font-light text-slate-100">${score}/100</p>
-                    </div>
-                    <div>
-                        <h3 class="font-semibold text-cyan-400">Risk Level</h3>
-                        <p class="text-xl font-bold ${riskColorClass}">${riskLevel}</p>
-                    </div>
-                </div>
-                
-                <div>
-                    <h3 class="font-semibold text-cyan-400">Assessment</h3>
-                    <p class="text-slate-300">${assessment}</p>
-                </div>
-                
-                <div>
-                    <h3 class="font-semibold text-cyan-400">Recommendation</h3>
-                    <p class="text-slate-300">${recommendation}</p>
-                </div>
-                
-                
+   // --- NEW HELPER FUNCTIONS TO RENDER DETAILED DATA ---
+
+function renderSection(title, content) {
+    if (!content) return '';
+    return `
+        <div class="mt-4 pt-4 border-t border-slate-700">
+            <h3 class="text-xl font-bold text-cyan-400 mb-2">${title}</h3>
+            ${content}
+        </div>
+    `;
+}
+
+function renderRedFlags(data) {
+    const redFlags = data?.risk_and_red_flags?.red_flags;
+    if (!redFlags || redFlags.length === 0) return '';
+    
+    const content = redFlags.map(flag => {
+        let severityColor = 'text-yellow-400';
+        if (flag.severity === 'Critical') severityColor = 'text-red-400';
+        if (flag.severity === 'High') severityColor = 'text-orange-400';
+
+        return `
+            <div class="bg-slate-900/50 p-3 rounded-lg mb-2">
+                <p class="font-bold ${severityColor}">[${flag.severity}] ${flag.issue}</p>
+                <p class="text-sm text-slate-300 mt-1"><strong class="text-slate-100">Why it matters:</strong> ${flag.why_it_matters}</p>
+                <p class="text-sm text-slate-400 mt-1"><strong class="text-slate-200">Mitigation:</strong> ${flag.mitigation}</p>
             </div>
         `;
+    }).join('');
+
+    return renderSection('🚨 Red Flags', `<div class="space-y-2">${content}</div>`);
+}
+
+function renderActionItems(data) {
+    const recommendedActions = data?.verdict?.recommended_actions;
+    const literacyTips = data?.digital_literacy_tips;
+    let content = '';
+
+    if (recommendedActions && recommendedActions.length > 0) {
+        content += '<h4 class="font-semibold text-slate-100 mb-1">Recommended Actions</h4>';
+        content += '<ul class="list-disc list-inside space-y-1 text-slate-300">';
+        content += recommendedActions.map(action => `<li>${action}</li>`).join('');
+        content += '</ul>';
     }
+
+    if (literacyTips && literacyTips.length > 0) {
+        content += `<h4 class="font-semibold text-slate-100 mt-3 mb-1">💡 Pro Tips</h4>`;
+        content += '<ul class="list-disc list-inside space-y-1 text-slate-300">';
+        content += literacyTips.map(tip => `<li><strong>(${tip.category})</strong> ${tip.tip}</li>`).join('');
+        content += '</ul>';
+    }
+
+    return renderSection('✅ Next Steps', content);
+}
+
+function renderSectionBreakdown(data) {
+    const keySections = data?.explanations?.key_sections;
+    if (!keySections || keySections.length === 0) return '';
+
+    const content = keySections.map(section => {
+         let importanceColor = 'bg-slate-600';
+        if (section.importance === 'High') importanceColor = 'bg-orange-600';
+        if (section.importance === 'Medium') importanceColor = 'bg-yellow-600';
+
+        return `
+            <div class="bg-slate-900/50 p-3 rounded-lg">
+                <div class="flex justify-between items-center">
+                    <p class="font-bold text-slate-100">${section.section_title}</p>
+                    <span class="text-xs font-medium px-2 py-0.5 rounded-full ${importanceColor}">${section.importance}</span>
+                </div>
+                <p class="text-sm text-slate-300 mt-1">${section.layman_summary}</p>
+            </div>
+        `;
+    }).join('');
+    return renderSection('📝 Document Breakdown', `<div class="space-y-2">${content}</div>`);
+}
+
+function renderVerifiedLinks(data) {
+    const links = data?.verified_links;
+    if (!links || links.length === 0) return '';
+
+    const content = links.map(link => `
+        <div class="bg-slate-900/50 p-3 rounded-lg">
+            <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="font-bold text-cyan-400 hover:underline">${link.title}</a>
+            <p class="text-sm text-slate-400 mt-1">${link.description}</p>
+        </div>
+    `).join('');
+    return renderSection('📚 Resources & Further Reading', `<div class="space-y-2">${content}</div>`);
+}
+
+
+function showResults(data) {
+    loadingContainer.innerHTML = '';
+    errorContainer.innerHTML = '';
+    console.log('📊 API Response:', data);
+    
+    // Main summary data
+    let assessment = data.verdict?.overall_assessment || 'Analysis completed';
+    let riskLevel = data.verdict?.risk_level || 'Unknown';
+    let score = data.context_aware_credibility_score?.overall_score || 0;
+    
+    let riskColorClass = 'text-slate-300';
+    if (riskLevel === 'Low') riskColorClass = 'text-green-400';
+    if (riskLevel === 'Medium') riskColorClass = 'text-yellow-400';
+    if (riskLevel === 'High') riskColorClass = 'text-orange-400';
+    if (riskLevel === 'Critical') riskColorClass = 'text-red-500';
+    
+    // Build the full results HTML
+    let resultsHtml = `
+        <div class="animate-fade-in bg-slate-800/50 border border-slate-700 rounded-lg p-6 space-y-4">
+            <h2 class="text-2xl font-bold text-slate-100 border-b border-slate-600 pb-2">
+                ✅ Analysis Complete
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <h3 class="font-semibold text-cyan-400">Credibility Score</h3>
+                    <p class="text-3xl font-light text-slate-100">${score}/100</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-cyan-400">Risk Level</h3>
+                    <p class="text-xl font-bold ${riskColorClass}">${riskLevel}</p>
+                </div>
+            </div>
+            <div>
+                <h3 class="font-semibold text-cyan-400">Assessment</h3>
+                <p class="text-slate-300">${assessment}</p>
+            </div>
+        </div>`;
+
+    // Append detailed sections
+    resultsHtml += renderRedFlags(data);
+    resultsHtml += renderActionItems(data);
+    resultsHtml += renderSectionBreakdown(data);
+    resultsHtml += renderVerifiedLinks(data);
+
+    resultsContainer.innerHTML = resultsHtml;
+}
     
     // API Functions
     async function verifyText(textToVerify) {
